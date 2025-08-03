@@ -9,6 +9,7 @@ interface PeriodCalendarProps {
   selectedDate?: string;
   onDateSelect: (date: string) => void;
   markedDates?: { [key: string]: any };
+  compact?: boolean;
 }
 
 export function PeriodCalendar({ 

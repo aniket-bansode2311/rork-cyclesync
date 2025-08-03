@@ -11,6 +11,7 @@ export function CycleCalendarWidget() {
       <PeriodCalendar
         periods={periods}
         onDateSelect={() => {}} // Read-only in widget
+        compact={true}
       />
     </View>
   );

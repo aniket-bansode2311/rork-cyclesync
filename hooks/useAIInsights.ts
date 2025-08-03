@@ -234,7 +234,7 @@ export function useAIInsights(): InsightContextType {
     const typeBreakdown = activeInsights.reduce((acc, insight) => {
       acc[insight.type] = (acc[insight.type] || 0) + 1;
       return acc;
-    }, {} as Record<InsightType, number>);
+    }, {} as Record<string, number>);
 
     const feedbackStats = activeInsights.reduce((acc, insight) => {
       if (insight.feedback) {

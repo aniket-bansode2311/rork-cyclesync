@@ -130,7 +130,11 @@ import {
   getUserInsightsProcedure,
   getCycleInsightsProcedure,
   getHealthInsightsProcedure,
-  getPersonalizedRecommendationsProcedure
+  getPersonalizedRecommendationsProcedure,
+  submitInsightFeedbackProcedure,
+  markInsightAsReadProcedure,
+  dismissInsightProcedure,
+  getInsightAnalyticsProcedure
 } from "./routes/insights/ai/route";
 
 // Privacy routes
@@ -331,6 +335,10 @@ export const appRouter = createTRPCRouter({
       getCycleInsights: getCycleInsightsProcedure,
       getHealthInsights: getHealthInsightsProcedure,
       getRecommendations: getPersonalizedRecommendationsProcedure,
+      submitFeedback: submitInsightFeedbackProcedure,
+      markAsRead: markInsightAsReadProcedure,
+      dismiss: dismissInsightProcedure,
+      getAnalytics: getInsightAnalyticsProcedure,
     }),
   }),
 
