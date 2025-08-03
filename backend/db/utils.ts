@@ -1047,45 +1047,201 @@ export async function getMenopauseTrends(userId: string, days: number) {
   return [];
 }
 
-// AI Insights utilities (mock implementations)
-export async function generateAIInsights(userId: string, type: string, timeframe: string) {
-  return {
-    id: 'mock-insight-id',
-    type,
-    timeframe,
-    insights: ['Mock insight 1', 'Mock insight 2'],
-    recommendations: ['Mock recommendation 1'],
-    generatedAt: new Date().toISOString(),
-  };
+// AI Insights utilities (enhanced implementations)
+export async function generateAIInsights(
+  userId: string, 
+  type: string, 
+  timeframe: string, 
+  options?: { forceRefresh?: boolean; maxInsights?: number }
+) {
+  // Mock implementation with more realistic data structure
+  const insights = [
+    {
+      id: `insight_${Date.now()}_1`,
+      type,
+      title: 'Cycle Pattern Analysis',
+      content: 'Your cycle has been consistent at 28 days for the past 3 months.',
+      confidence: 0.85,
+      priority: 'medium' as const,
+      category: 'cycle' as const,
+      isRead: false,
+      isDismissed: false,
+      generatedAt: new Date().toISOString(),
+      actionable: true,
+      tags: ['cycle', 'patterns'],
+    },
+    {
+      id: `insight_${Date.now()}_2`,
+      type,
+      title: 'Symptom Correlation',
+      content: 'You tend to experience more headaches 2 days before your period starts.',
+      confidence: 0.72,
+      priority: 'high' as const,
+      category: 'symptoms' as const,
+      isRead: false,
+      isDismissed: false,
+      generatedAt: new Date().toISOString(),
+      actionable: true,
+      tags: ['symptoms', 'headaches', 'pms'],
+    },
+  ];
+  
+  return insights.slice(0, options?.maxInsights || 5);
 }
 
-export async function getUserInsights(userId: string, limit: number, type?: string) {
-  return [];
+export async function getUserInsights(
+  userId: string, 
+  options: {
+    limit: number;
+    type?: string;
+    includeRead: boolean;
+    includeDismissed: boolean;
+    sortBy: string;
+    sortOrder: string;
+  }
+) {
+  // Mock implementation with filtering
+  const allInsights = [
+    {
+      id: 'insight_1',
+      type: 'cycle',
+      title: 'Regular Cycle Pattern',
+      content: 'Your cycle has been consistent.',
+      confidence: 0.85,
+      priority: 'medium' as const,
+      isRead: false,
+      isDismissed: false,
+      generatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'insight_2',
+      type: 'symptoms',
+      title: 'PMS Symptoms',
+      content: 'Common symptoms before period.',
+      confidence: 0.72,
+      priority: 'high' as const,
+      isRead: true,
+      isDismissed: false,
+      generatedAt: new Date().toISOString(),
+    },
+  ];
+  
+  let filtered = allInsights;
+  
+  if (options.type) {
+    filtered = filtered.filter(insight => insight.type === options.type);
+  }
+  
+  if (!options.includeRead) {
+    filtered = filtered.filter(insight => !insight.isRead);
+  }
+  
+  if (!options.includeDismissed) {
+    filtered = filtered.filter(insight => !insight.isDismissed);
+  }
+  
+  return filtered.slice(0, options.limit);
 }
 
-export async function getCycleInsights(userId: string, cycleId?: string, months = 3) {
+export async function getCycleInsights(
+  userId: string, 
+  options: {
+    cycleId?: string;
+    months: number;
+    includePatterns: boolean;
+    includePredictions: boolean;
+  }
+) {
   return {
     averageCycleLength: 28,
     averagePeriodLength: 5,
-    commonSymptoms: ['cramps', 'bloating'],
-    moodPatterns: ['irritable before period'],
+    cycleVariability: 2.1,
+    lastPeriodDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    totalPeriods: 12,
+    predictedNextPeriod: new Date(Date.now() + 13 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    commonSymptoms: [
+      { name: 'cramps', frequency: 0.8, averageIntensity: 2.5, trend: 'stable' as const },
+      { name: 'bloating', frequency: 0.6, averageIntensity: 2.0, trend: 'decreasing' as const },
+    ],
+    moodPatterns: [
+      { mood: 'irritable', frequency: 0.7, averageIntensity: 2.3, trend: 'stable' as const },
+      { mood: 'anxious', frequency: 0.4, averageIntensity: 1.8, trend: 'improving' as const },
+    ],
   };
 }
 
-export async function getHealthInsights(userId: string, categories?: string[], timeframe = 'month') {
+export async function getHealthInsights(
+  userId: string, 
+  options: {
+    categories?: string[];
+    timeframe: string;
+    includeCorrelations: boolean;
+    minConfidence: number;
+  }
+) {
   return {
     sleepQuality: 'good',
     activityLevel: 'moderate',
     nutritionScore: 75,
     recommendations: ['Increase water intake', 'Add more fiber to diet'],
+    correlations: options.includeCorrelations ? [
+      { factor1: 'sleep', factor2: 'mood', correlation: 0.65 },
+      { factor1: 'exercise', factor2: 'energy', correlation: 0.72 },
+    ] : [],
   };
 }
 
-export async function getPersonalizedRecommendations(userId: string, category?: string, limit = 5) {
-  return [
-    { id: '1', category: 'nutrition', title: 'Increase iron intake', description: 'Consider iron-rich foods during your period' },
-    { id: '2', category: 'activity', title: 'Light exercise', description: 'Try yoga or walking during PMS' },
+export async function getPersonalizedRecommendations(
+  userId: string, 
+  options: {
+    category?: string;
+    limit: number;
+    priority?: string;
+    excludeCompleted: boolean;
+  }
+) {
+  const allRecommendations = [
+    { 
+      id: '1', 
+      category: 'nutrition', 
+      title: 'Increase iron intake', 
+      description: 'Consider iron-rich foods during your period',
+      priority: 'high' as const,
+      completed: false,
+    },
+    { 
+      id: '2', 
+      category: 'activity', 
+      title: 'Light exercise', 
+      description: 'Try yoga or walking during PMS',
+      priority: 'medium' as const,
+      completed: false,
+    },
+    { 
+      id: '3', 
+      category: 'sleep', 
+      title: 'Improve sleep hygiene', 
+      description: 'Maintain consistent bedtime routine',
+      priority: 'low' as const,
+      completed: true,
+    },
   ];
+  
+  let filtered = allRecommendations;
+  
+  if (options.category) {
+    filtered = filtered.filter(rec => rec.category === options.category);
+  }
+  
+  if (options.priority) {
+    filtered = filtered.filter(rec => rec.priority === options.priority);
+  }
+  
+  if (options.excludeCompleted) {
+    filtered = filtered.filter(rec => !rec.completed);
+  }
+  
+  return filtered.slice(0, options.limit);
 }
 
 // Privacy utilities

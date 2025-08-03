@@ -44,7 +44,7 @@ import {
 } from "./routes/fertility/predictions/route";
 
 // Wellness routes
-import { getWaterIntakeLogsProcedure, logWaterIntakeProcedure } from "./routes/wellness/water/route";
+import { getWaterIntakeProcedure, logWaterIntakeProcedure } from "./routes/wellness/water/route";
 import { 
   getNutritionLogsProcedure, 
   logNutritionProcedure, 
@@ -166,7 +166,7 @@ import {
 } from "./routes/dashboard/widgets/route";
 
 // Achievement routes
-import { getAchievementProgressProcedure } from "./routes/achievements/progress/route";
+import { getAchievementsProcedure } from "./routes/achievements/progress/route";
 
 export const appRouter = createTRPCRouter({
   // Example routes
@@ -232,7 +232,7 @@ export const appRouter = createTRPCRouter({
   // Wellness tracking
   wellness: createTRPCRouter({
     water: createTRPCRouter({
-      getLogs: getWaterIntakeLogsProcedure,
+      getLogs: getWaterIntakeProcedure,
       log: logWaterIntakeProcedure,
     }),
     nutrition: createTRPCRouter({
@@ -379,7 +379,7 @@ export const appRouter = createTRPCRouter({
   // Achievements
   achievements: createTRPCRouter({
     progress: createTRPCRouter({
-      get: getAchievementProgressProcedure,
+      get: getAchievementsProcedure,
     }),
   }),
 });

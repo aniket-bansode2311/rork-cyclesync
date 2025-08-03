@@ -22,7 +22,10 @@ export const generateAIInsightsProcedure = protectedProcedure
     forceRefresh: z.boolean().default(false),
     maxInsights: z.number().min(1).max(20).default(5),
   }))
-  .mutation(async ({ ctx, input }) => {
+  .mutation(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { type: 'cycle' | 'symptoms' | 'mood' | 'fertility' | 'wellness' | 'general'; timeframe: 'week' | 'month' | 'quarter' | 'year'; forceRefresh: boolean; maxInsights: number } 
+  }) => {
     try {
       console.log(`🤖 Generating AI insights for user ${ctx.user.id}:`, input);
       
@@ -61,7 +64,10 @@ export const getUserInsightsProcedure = protectedProcedure
     sortBy: z.enum(['date', 'priority', 'confidence']).default('date'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
   }))
-  .query(async ({ ctx, input }) => {
+  .query(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { limit: number; type?: 'cycle' | 'symptoms' | 'mood' | 'fertility' | 'wellness' | 'general'; includeRead: boolean; includeDismissed: boolean; sortBy: 'date' | 'priority' | 'confidence'; sortOrder: 'asc' | 'desc' } 
+  }) => {
     try {
       const insights = await getUserInsights(ctx.user.id, {
         limit: input.limit,
@@ -75,8 +81,8 @@ export const getUserInsightsProcedure = protectedProcedure
       return {
         insights,
         totalCount: insights.length,
-        unreadCount: insights.filter(i => !i.isRead).length,
-        highPriorityCount: insights.filter(i => i.priority === 'high' || i.priority === 'urgent').length,
+        unreadCount: insights.filter((i: any) => !i.isRead).length,
+        highPriorityCount: insights.filter((i: any) => i.priority === 'high' || i.priority === 'urgent').length,
       };
     } catch (error) {
       console.error('❌ Error fetching user insights:', error);
@@ -95,7 +101,10 @@ export const getCycleInsightsProcedure = protectedProcedure
     includePatterns: z.boolean().default(true),
     includePredictions: z.boolean().default(true),
   }))
-  .query(async ({ ctx, input }) => {
+  .query(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { cycleId?: string; months: number; includePatterns: boolean; includePredictions: boolean } 
+  }) => {
     try {
       const insights = await getCycleInsights(ctx.user.id, {
         cycleId: input.cycleId,
@@ -127,7 +136,10 @@ export const getHealthInsightsProcedure = protectedProcedure
     includeCorrelations: z.boolean().default(true),
     minConfidence: z.number().min(0).max(1).default(0.5),
   }))
-  .query(async ({ ctx, input }) => {
+  .query(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { categories?: ('nutrition' | 'activity' | 'sleep' | 'mood' | 'symptoms')[]; timeframe: 'week' | 'month' | 'quarter'; includeCorrelations: boolean; minConfidence: number } 
+  }) => {
     try {
       const insights = await getHealthInsights(ctx.user.id, {
         categories: input.categories,
@@ -160,7 +172,10 @@ export const getPersonalizedRecommendationsProcedure = protectedProcedure
     priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
     excludeCompleted: z.boolean().default(true),
   }))
-  .query(async ({ ctx, input }) => {
+  .query(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { category?: 'cycle' | 'fertility' | 'wellness' | 'nutrition' | 'activity' | 'sleep'; limit: number; priority?: 'low' | 'medium' | 'high' | 'urgent'; excludeCompleted: boolean } 
+  }) => {
     try {
       const recommendations = await getPersonalizedRecommendations(ctx.user.id, {
         category: input.category,
@@ -193,7 +208,10 @@ export const submitInsightFeedbackProcedure = protectedProcedure
     notes: z.string().optional(),
     actionTaken: z.boolean().default(false),
   }))
-  .mutation(async ({ ctx, input }) => {
+  .mutation(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { insightId: string; feedbackType: 'helpful' | 'not_helpful' | 'very_helpful'; notes?: string; actionTaken: boolean } 
+  }) => {
     try {
       // This would typically update the insight feedback in the database
       console.log(`📝 Insight feedback submitted for user ${ctx.user.id}:`, input);
@@ -217,7 +235,10 @@ export const markInsightAsReadProcedure = protectedProcedure
   .input(z.object({
     insightId: z.string(),
   }))
-  .mutation(async ({ ctx, input }) => {
+  .mutation(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { insightId: string } 
+  }) => {
     try {
       console.log(`👁️ Marking insight as read for user ${ctx.user.id}:`, input.insightId);
       
@@ -240,7 +261,10 @@ export const dismissInsightProcedure = protectedProcedure
     insightId: z.string(),
     reason: z.string().optional(),
   }))
-  .mutation(async ({ ctx, input }) => {
+  .mutation(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { insightId: string; reason?: string } 
+  }) => {
     try {
       console.log(`🚫 Dismissing insight for user ${ctx.user.id}:`, input);
       
@@ -262,7 +286,10 @@ export const getInsightAnalyticsProcedure = protectedProcedure
   .input(z.object({
     timeframe: timeframeSchema.default('month'),
   }))
-  .query(async ({ ctx, input }) => {
+  .query(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { timeframe: 'week' | 'month' | 'quarter' | 'year' } 
+  }) => {
     try {
       // This would typically fetch analytics from the database
       const analytics = {
