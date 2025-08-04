@@ -46,7 +46,56 @@ export const generateAIInsightsProcedure = protectedProcedure
         count: insights.length,
       };
     } catch (error) {
-      console.error('❌ Error generating AI insights:', error);
+      console.error('❌ Error dismissing insight:', error);
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to dismiss insight. Please try again later.',
+        cause: error,
+      });
+    }
+  });
+
+export const getInsightAnalyticsProcedure = protectedProcedure
+  .input(z.object({
+    timeframe: timeframeSchema.default('month'),
+  }))
+  .query(async ({ ctx, input }: { 
+    ctx: { user: { id: string } }; 
+    input: { timeframe: 'week' | 'month' | 'quarter' | 'year' } 
+  }) => {
+    try {
+      // This would typically fetch analytics from the database
+      const analytics = {
+        totalInsights: 15,
+        readInsights: 12,
+        actionTakenCount: 8,
+        averageConfidence: 0.78,
+        categoryBreakdown: {
+          cycle: 5,
+          symptoms: 4,
+          mood: 3,
+          fertility: 2,
+          wellness: 1,
+        },
+        feedbackStats: {
+          helpful: 8,
+          notHelpful: 2,
+          veryHelpful: 5,
+        },
+        timeframe: input.timeframe,
+        generatedAt: new Date().toISOString(),
+      };
+      
+      return analytics;
+    } catch (error) {
+      console.error('❌ Error fetching insight analytics:', error);
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to fetch insight analytics. Please try again later.',
+        cause: error,
+      });
+    }
+  });.error('❌ Error generating AI insights:', error);
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Failed to generate AI insights. Please try again later.',
@@ -273,53 +322,4 @@ export const dismissInsightProcedure = protectedProcedure
         dismissedAt: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('❌ Error dismissing insight:', error);
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to dismiss insight. Please try again later.',
-        cause: error,
-      });
-    }
-  });
-
-export const getInsightAnalyticsProcedure = protectedProcedure
-  .input(z.object({
-    timeframe: timeframeSchema.default('month'),
-  }))
-  .query(async ({ ctx, input }: { 
-    ctx: { user: { id: string } }; 
-    input: { timeframe: 'week' | 'month' | 'quarter' | 'year' } 
-  }) => {
-    try {
-      // This would typically fetch analytics from the database
-      const analytics = {
-        totalInsights: 15,
-        readInsights: 12,
-        actionTakenCount: 8,
-        averageConfidence: 0.78,
-        categoryBreakdown: {
-          cycle: 5,
-          symptoms: 4,
-          mood: 3,
-          fertility: 2,
-          wellness: 1,
-        },
-        feedbackStats: {
-          helpful: 8,
-          notHelpful: 2,
-          veryHelpful: 5,
-        },
-        timeframe: input.timeframe,
-        generatedAt: new Date().toISOString(),
-      };
-      
-      return analytics;
-    } catch (error) {
-      console.error('❌ Error fetching insight analytics:', error);
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to fetch insight analytics. Please try again later.',
-        cause: error,
-      });
-    }
-  });
+      console
