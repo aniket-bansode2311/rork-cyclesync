@@ -1,0 +1,339 @@
+name: Mobile App CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'mobile/**'
+      - 'app/**'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'mobile/**'
+      - 'app/**'
+
+env:
+  NODE_VERSION: '18'
+  JAVA_VERSION: '11'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd mobile
+        npm ci
+
+    - name: Run linting
+      run: |
+        cd mobile
+        npm run lint
+
+    - name: Run unit tests
+      run: |
+        cd mobile
+        npm run test -- --coverage --watchAll=false
+
+    - name: Upload test coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./mobile/coverage/lcov.info
+        flags: mobile
+
+  build-android:
+    name: Build Android App
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ env.JAVA_VERSION }}
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install dependencies
+      run: |
+        cd mobile
+        npm ci
+
+    - name: Create env file
+      run: |
+        cd mobile
+        echo "API_BASE_URL=${{ secrets.API_BASE_URL }}" > .env
+        echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}" >> .env
+
+    - name: Build Android Debug APK
+      run: |
+        cd mobile/android
+        ./gradlew assembleDebug
+
+    - name: Build Android Release APK
+      run: |
+        cd mobile/android
+        ./gradlew assembleRelease
+      env:
+        MYAPP_UPLOAD_STORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+        MYAPP_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        MYAPP_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        MYAPP_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    - name: Upload Android artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-builds
+        path: |
+          mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          mobile/android/app/build/outputs/apk/release/app-release.apk
+
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Install dependencies
+      run: |
+        cd mobile
+        npm ci
+
+    - name: Install CocoaPods
+      run: |
+        cd mobile/ios
+        pod install
+
+    - name: Create env file
+      run: |
+        cd mobile
+        echo "API_BASE_URL=${{ secrets.API_BASE_URL }}" > .env
+        echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}" >> .env
+
+    - name: Build iOS Debug
+      run: |
+        cd mobile/ios
+        xcodebuild -workspace CycleSync.xcworkspace \
+          -scheme CycleSync \
+          -configuration Debug \
+          -destination 'generic/platform=iOS Simulator' \
+          -archivePath $PWD/build/CycleSync.xcarchive \
+          archive
+
+    - name: Build iOS Release
+      run: |
+        cd mobile/ios
+        xcodebuild -workspace CycleSync.xcworkspace \
+          -scheme CycleSync \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath $PWD/build/CycleSync.xcarchive \
+          archive
+      env:
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+
+    - name: Upload iOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-builds
+        path: mobile/ios/build/
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [build-android]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ env.JAVA_VERSION }}
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install dependencies
+      run: |
+        cd mobile
+        npm ci
+
+    - name: Download Android build
+      uses: actions/download-artifact@v4
+      with:
+        name: android-builds
+        path: mobile/android/app/build/outputs/apk/
+
+    - name: Start Metro bundler
+      run: |
+        cd mobile
+        npm start &
+        sleep 10
+
+    - name: Start Android emulator
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 29
+        target: default
+        arch: x86_64
+        profile: Nexus 6
+        script: |
+          cd mobile
+          npm run e2e:android
+
+    - name: Upload E2E test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-results
+        path: mobile/e2e/artifacts/
+
+  distribute-testing:
+    name: Distribute to Testing
+    runs-on: ubuntu-latest
+    needs: [build-android, build-ios, e2e-tests]
+    if: github.ref == 'refs/heads/main'
+    environment: testing
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Android build
+      uses: actions/download-artifact@v4
+      with:
+        name: android-builds
+        path: ./builds/android/
+
+    - name: Download iOS build
+      uses: actions/download-artifact@v4
+      with:
+        name: ios-builds
+        path: ./builds/ios/
+
+    - name: Distribute Android to Firebase App Distribution
+      uses: wzieba/Firebase-Distribution-Github-Action@v1
+      with:
+        appId: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+        serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        groups: testers
+        file: ./builds/android/debug/app-debug.apk
+        releaseNotes: |
+          Build from commit: ${{ github.sha }}
+          Changes: ${{ github.event.head_commit.message }}
+
+    - name: Distribute iOS to Firebase App Distribution
+      uses: wzieba/Firebase-Distribution-Github-Action@v1
+      with:
+        appId: ${{ secrets.FIREBASE_IOS_APP_ID }}
+        serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        groups: testers
+        file: ./builds/ios/CycleSync.ipa
+        releaseNotes: |
+          Build from commit: ${{ github.sha }}
+          Changes: ${{ github.event.head_commit.message }}
+
+    - name: Notify testers
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: |
+          New CycleSync build available for testing!
+          Android: Firebase App Distribution
+          iOS: Firebase App Distribution
+          Changes: ${{ github.event.head_commit.message }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  publish-stores:
+    name: Publish to App Stores
+    runs-on: ubuntu-latest
+    needs: [distribute-testing]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download builds
+      uses: actions/download-artifact@v4
+      with:
+        name: android-builds
+        path: ./builds/android/
+
+    - name: Publish to Google Play Store
+      uses: r0adkll/upload-google-play@v1
+      with:
+        serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}
+        packageName: com.cyclesync.app
+        releaseFiles: ./builds/android/release/app-release.apk
+        track: internal
+        status: draft
+        whatsNewDirectory: mobile/fastlane/metadata/android/
+
+    - name: Notify publication status
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: |
+          CycleSync app store publication: ${{ job.status }}
+          Google Play: Draft uploaded to internal testing
+          App Store: Manual review required
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
