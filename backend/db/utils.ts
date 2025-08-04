@@ -112,8 +112,7 @@ export async function createCycle(cycleData: {
 export async function getPeriodLogs(userId: string, startDate?: string, endDate?: string) {
   let query = db
     .select()
-    .from(periodLogs)
-    .where(eq(periodLogs.userId, userId));
+    .from(periodLogs);
 
   if (startDate && endDate) {
     query = query.where(
@@ -123,6 +122,8 @@ export async function getPeriodLogs(userId: string, startDate?: string, endDate?
         lte(periodLogs.date, endDate)
       )
     );
+  } else {
+    query = query.where(eq(periodLogs.userId, userId));
   }
 
   return await query.orderBy(desc(periodLogs.date));
@@ -144,8 +145,7 @@ export async function logPeriod(logData: {
 export async function getSymptomLogs(userId: string, startDate?: string, endDate?: string) {
   let query = db
     .select()
-    .from(symptomLogs)
-    .where(eq(symptomLogs.userId, userId));
+    .from(symptomLogs);
 
   if (startDate && endDate) {
     query = query.where(
@@ -155,6 +155,8 @@ export async function getSymptomLogs(userId: string, startDate?: string, endDate
         lte(symptomLogs.date, endDate)
       )
     );
+  } else {
+    query = query.where(eq(symptomLogs.userId, userId));
   }
 
   return await query.orderBy(desc(symptomLogs.date));
@@ -175,8 +177,7 @@ export async function logSymptom(logData: {
 export async function getMoodLogs(userId: string, startDate?: string, endDate?: string) {
   let query = db
     .select()
-    .from(moodLogs)
-    .where(eq(moodLogs.userId, userId));
+    .from(moodLogs);
 
   if (startDate && endDate) {
     query = query.where(
@@ -186,6 +187,8 @@ export async function getMoodLogs(userId: string, startDate?: string, endDate?: 
         lte(moodLogs.date, endDate)
       )
     );
+  } else {
+    query = query.where(eq(moodLogs.userId, userId));
   }
 
   return await query.orderBy(desc(moodLogs.date));
@@ -405,8 +408,7 @@ export async function exportUserData(userId: string) {
 export async function getBBTLogs(userId: string, startDate?: string, endDate?: string, limit = 30) {
   let query = db
     .select()
-    .from(bbtLogs)
-    .where(eq(bbtLogs.userId, userId));
+    .from(bbtLogs);
 
   if (startDate && endDate) {
     query = query.where(
@@ -416,6 +418,8 @@ export async function getBBTLogs(userId: string, startDate?: string, endDate?: s
         lte(bbtLogs.date, endDate)
       )
     );
+  } else {
+    query = query.where(eq(bbtLogs.userId, userId));
   }
 
   return await query.orderBy(desc(bbtLogs.date)).limit(limit);
@@ -428,7 +432,11 @@ export async function createBBTLog(logData: {
   time?: string;
   notes?: string;
 }) {
-  const [log] = await db.insert(bbtLogs).values(logData).returning();
+  // Convert temperature to string if schema expects string
+  const [log] = await db.insert(bbtLogs).values({
+    ...logData,
+    temperature: logData.temperature.toString(),
+  }).returning();
   return log;
 }
 
@@ -437,9 +445,16 @@ export async function updateBBTLog(id: string, userId: string, updateData: {
   time?: string;
   notes?: string;
 }) {
+  const updateValues: any = { ...updateData, updatedAt: new Date() };
+  
+  // Convert temperature to string if provided
+  if (updateData.temperature !== undefined) {
+    updateValues.temperature = updateData.temperature.toString();
+  }
+  
   const [log] = await db
     .update(bbtLogs)
-    .set({ ...updateData, updatedAt: new Date() })
+    .set(updateValues)
     .where(and(eq(bbtLogs.id, id), eq(bbtLogs.userId, userId)))
     .returning();
   return log;
@@ -472,8 +487,7 @@ export async function getBBTTrends(userId: string, days = 30) {
 export async function getCervicalMucusLogs(userId: string, startDate?: string, endDate?: string, limit = 30) {
   let query = db
     .select()
-    .from(cervicalMucusLogs)
-    .where(eq(cervicalMucusLogs.userId, userId));
+    .from(cervicalMucusLogs);
 
   if (startDate && endDate) {
     query = query.where(
@@ -483,6 +497,8 @@ export async function getCervicalMucusLogs(userId: string, startDate?: string, e
         lte(cervicalMucusLogs.date, endDate)
       )
     );
+  } else {
+    query = query.where(eq(cervicalMucusLogs.userId, userId));
   }
 
   return await query.orderBy(desc(cervicalMucusLogs.date)).limit(limit);
@@ -528,10 +544,14 @@ export async function getFertilityPredictions(userId: string) {
     return null;
   }
 
+  // Handle null values with defaults
+  const cycleLength = settings.cycleLength ?? 28;
+  const lutealPhaseLength = settings.lutealPhaseLength ?? 14;
+
   const cycleStart = new Date(currentCycle.startDate);
-  const ovulationDay = settings.cycleLength - settings.lutealPhaseLength;
+  const ovulationDay = cycleLength - lutealPhaseLength;
   const ovulationDate = new Date(cycleStart.getTime() + (ovulationDay * 24 * 60 * 60 * 1000));
-  const nextPeriodDate = new Date(cycleStart.getTime() + (settings.cycleLength * 24 * 60 * 60 * 1000));
+  const nextPeriodDate = new Date(cycleStart.getTime() + (cycleLength * 24 * 60 * 60 * 1000));
   
   return {
     ovulationDate: ovulationDate.toISOString().split('T')[0],
@@ -560,10 +580,13 @@ export async function getCyclePredictions(userId: string, months = 3) {
   
   if (!settings) return [];
   
+  const cycleLength = settings.cycleLength ?? 28;
+  const lutealPhaseLength = settings.lutealPhaseLength ?? 14;
+  
   const today = new Date();
   for (let i = 0; i < months; i++) {
-    const cycleStart = new Date(today.getTime() + (i * settings.cycleLength * 24 * 60 * 60 * 1000));
-    const ovulationDay = settings.cycleLength - settings.lutealPhaseLength;
+    const cycleStart = new Date(today.getTime() + (i * cycleLength * 24 * 60 * 60 * 1000));
+    const ovulationDay = cycleLength - lutealPhaseLength;
     const ovulationDate = new Date(cycleStart.getTime() + (ovulationDay * 24 * 60 * 60 * 1000));
     
     predictions.push({
@@ -580,8 +603,7 @@ export async function getCyclePredictions(userId: string, months = 3) {
 export async function getWaterIntakeLogsProcedure(userId: string, date?: string) {
   let query = db
     .select()
-    .from(waterIntakeLogs)
-    .where(eq(waterIntakeLogs.userId, userId));
+    .from(waterIntakeLogs);
 
   if (date) {
     query = query.where(
@@ -590,6 +612,8 @@ export async function getWaterIntakeLogsProcedure(userId: string, date?: string)
         eq(waterIntakeLogs.date, date)
       )
     );
+  } else {
+    query = query.where(eq(waterIntakeLogs.userId, userId));
   }
 
   return await query.orderBy(desc(waterIntakeLogs.date));
@@ -636,8 +660,7 @@ export async function getNutritionLogs(userId: string, filters: {
 }) {
   let query = db
     .select()
-    .from(nutritionLogs)
-    .where(eq(nutritionLogs.userId, userId));
+    .from(nutritionLogs);
 
   if (filters.date) {
     query = query.where(
@@ -654,6 +677,8 @@ export async function getNutritionLogs(userId: string, filters: {
         lte(nutritionLogs.date, filters.endDate)
       )
     );
+  } else {
+    query = query.where(eq(nutritionLogs.userId, userId));
   }
 
   if (filters.mealType) {
@@ -683,7 +708,35 @@ export async function createNutritionLog(logData: {
   sodium?: number;
   mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
 }) {
-  const [log] = await db.insert(nutritionLogs).values(logData).returning();
+  // Convert numeric values to strings if schema expects strings
+  const processedData: any = { ...logData };
+  
+  if (logData.quantity !== undefined) {
+    processedData.quantity = logData.quantity.toString();
+  }
+  if (logData.calories !== undefined) {
+    processedData.calories = logData.calories.toString();
+  }
+  if (logData.protein !== undefined) {
+    processedData.protein = logData.protein.toString();
+  }
+  if (logData.carbs !== undefined) {
+    processedData.carbs = logData.carbs.toString();
+  }
+  if (logData.fat !== undefined) {
+    processedData.fat = logData.fat.toString();
+  }
+  if (logData.fiber !== undefined) {
+    processedData.fiber = logData.fiber.toString();
+  }
+  if (logData.sugar !== undefined) {
+    processedData.sugar = logData.sugar.toString();
+  }
+  if (logData.sodium !== undefined) {
+    processedData.sodium = logData.sodium.toString();
+  }
+  
+  const [log] = await db.insert(nutritionLogs).values(processedData).returning();
   return log;
 }
 
@@ -714,13 +767,22 @@ export async function getNutritionSummary(userId: string, date: string) {
     );
 
   const summary = logs.reduce((acc, log) => {
-    acc.totalCalories += log.calories || 0;
-    acc.totalProtein += log.protein || 0;
-    acc.totalCarbs += log.carbs || 0;
-    acc.totalFat += log.fat || 0;
-    acc.totalFiber += log.fiber || 0;
-    acc.totalSugar += log.sugar || 0;
-    acc.totalSodium += log.sodium || 0;
+    // Convert string values to numbers for calculation
+    const calories = typeof log.calories === 'string' ? parseFloat(log.calories) || 0 : log.calories || 0;
+    const protein = typeof log.protein === 'string' ? parseFloat(log.protein) || 0 : log.protein || 0;
+    const carbs = typeof log.carbs === 'string' ? parseFloat(log.carbs) || 0 : log.carbs || 0;
+    const fat = typeof log.fat === 'string' ? parseFloat(log.fat) || 0 : log.fat || 0;
+    const fiber = typeof log.fiber === 'string' ? parseFloat(log.fiber) || 0 : log.fiber || 0;
+    const sugar = typeof log.sugar === 'string' ? parseFloat(log.sugar) || 0 : log.sugar || 0;
+    const sodium = typeof log.sodium === 'string' ? parseFloat(log.sodium) || 0 : log.sodium || 0;
+    
+    acc.totalCalories += calories;
+    acc.totalProtein += protein;
+    acc.totalCarbs += carbs;
+    acc.totalFat += fat;
+    acc.totalFiber += fiber;
+    acc.totalSugar += sugar;
+    acc.totalSodium += sodium;
     return acc;
   }, {
     totalCalories: 0,
@@ -743,8 +805,7 @@ export async function getActivityLogs(userId: string, filters: {
 }) {
   let query = db
     .select()
-    .from(activityLogs)
-    .where(eq(activityLogs.userId, userId));
+    .from(activityLogs);
 
   if (filters.startDate && filters.endDate) {
     query = query.where(
@@ -754,13 +815,17 @@ export async function getActivityLogs(userId: string, filters: {
         lte(activityLogs.date, filters.endDate)
       )
     );
+  } else {
+    query = query.where(eq(activityLogs.userId, userId));
   }
 
   if (filters.type) {
+    // Cast the type to match the enum
+    const activityType = filters.type as 'cardio' | 'strength' | 'yoga' | 'walking' | 'running' | 'cycling' | 'swimming' | 'other';
     query = query.where(
       and(
         eq(activityLogs.userId, userId),
-        eq(activityLogs.type, filters.type)
+        eq(activityLogs.type, activityType)
       )
     );
   }
@@ -826,8 +891,7 @@ export async function getActivitySummary(userId: string, startDate: string, endD
 export async function getSleepLogs(userId: string, startDate?: string, endDate?: string, limit = 30) {
   let query = db
     .select()
-    .from(sleepLogs)
-    .where(eq(sleepLogs.userId, userId));
+    .from(sleepLogs);
 
   if (startDate && endDate) {
     query = query.where(
@@ -837,6 +901,8 @@ export async function getSleepLogs(userId: string, startDate?: string, endDate?:
         lte(sleepLogs.date, endDate)
       )
     );
+  } else {
+    query = query.where(eq(sleepLogs.userId, userId));
   }
 
   return await query.orderBy(desc(sleepLogs.date)).limit(limit);
@@ -851,7 +917,20 @@ export async function createSleepLog(logData: {
   quality?: 'poor' | 'fair' | 'good' | 'excellent';
   notes?: string;
 }) {
-  const [log] = await db.insert(sleepLogs).values(logData).returning();
+  // Convert time strings to Date objects if schema expects Date
+  const processedData: any = { ...logData };
+  
+  if (logData.bedtime) {
+    // If bedtime is a string, convert to Date object
+    processedData.bedtime = new Date(`1970-01-01T${logData.bedtime}:00.000Z`);
+  }
+  
+  if (logData.wakeTime) {
+    // If wakeTime is a string, convert to Date object
+    processedData.wakeTime = new Date(`1970-01-01T${logData.wakeTime}:00.000Z`);
+  }
+  
+  const [log] = await db.insert(sleepLogs).values(processedData).returning();
   return log;
 }
 
