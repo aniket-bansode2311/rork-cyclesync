@@ -2,8 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import createContextHook from "@nkzw/create-context-hook";
+import { User as SupabaseUser } from '@supabase/supabase-js';
 
-import { loginApi, signupApi } from "@/api/auth";
+import { supabase } from "@/lib/supabase";
 import { AuthState, LoginCredentials, SignupCredentials, User } from "@/types/auth";
 import { handleAPIError, isRetryableError, getRetryDelay } from "@/utils/errorHandler";
 import React from "react";
@@ -25,9 +26,50 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const router = useRouter();
   const segments = useSegments();
 
-  // Check if user is authenticated on mount
+  // Check if user is authenticated on mount and listen to auth changes
   useEffect(() => {
     loadStoredAuth();
+    
+    // Listen to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.id);
+        
+        if (session?.user) {
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            firstName: session.user.user_metadata?.firstName || '',
+            lastName: session.user.user_metadata?.lastName || '',
+            isEmailVerified: session.user.email_confirmed_at !== null,
+            createdAt: session.user.created_at,
+          };
+          
+          await saveAuthData(session.access_token, user);
+          
+          setState({
+            user,
+            token: session.access_token,
+            isLoading: false,
+            error: null,
+            isAuthenticated: true,
+          });
+        } else {
+          await clearAuthData();
+          setState({
+            user: null,
+            token: null,
+            isLoading: false,
+            error: null,
+            isAuthenticated: false,
+          });
+        }
+      }
+    );
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Handle routing based on auth state
@@ -51,16 +93,30 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   // Load stored authentication data
   const loadStoredAuth = async () => {
     try {
-      const [storedToken, storedUser] = await Promise.all([
-        AsyncStorage.getItem(TOKEN_KEY),
-        AsyncStorage.getItem(USER_KEY),
-      ]);
-
-      if (storedToken && storedUser) {
-        const user = JSON.parse(storedUser) as User;
+      // Check if there's an active Supabase session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error getting session:', error);
+        setState(prev => ({ ...prev, isLoading: false }));
+        return;
+      }
+      
+      if (session?.user) {
+        const user: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          firstName: session.user.user_metadata?.firstName || '',
+          lastName: session.user.user_metadata?.lastName || '',
+          isEmailVerified: session.user.email_confirmed_at !== null,
+          createdAt: session.user.created_at,
+        };
+        
+        await saveAuthData(session.access_token, user);
+        
         setState({
           user,
-          token: storedToken,
+          token: session.access_token,
           isLoading: false,
           error: null,
           isAuthenticated: true,
@@ -130,25 +186,45 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
-      const response = await retryAuthOperation(() => loginApi(credentials));
-      
-      await saveAuthData(response.token, response.user);
-      
-      setState({
-        user: response.user,
-        token: response.token,
-        isLoading: false,
-        error: null,
-        isAuthenticated: true,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
       });
       
-      return true;
-    } catch (error) {
-      const apiError = handleAPIError(error);
+      if (error) {
+        throw error;
+      }
+      
+      if (data.user && data.session) {
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email || '',
+          firstName: data.user.user_metadata?.firstName || '',
+          lastName: data.user.user_metadata?.lastName || '',
+          isEmailVerified: data.user.email_confirmed_at !== null,
+          createdAt: data.user.created_at,
+        };
+        
+        await saveAuthData(data.session.access_token, user);
+        
+        setState({
+          user,
+          token: data.session.access_token,
+          isLoading: false,
+          error: null,
+          isAuthenticated: true,
+        });
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error: any) {
+      console.error('Login error:', error);
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
-        error: apiError.message,
+        error: error.message || 'Login failed',
         isAuthenticated: false,
       }));
       
@@ -161,25 +237,62 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
-      const response = await retryAuthOperation(() => signupApi(credentials));
-      
-      await saveAuthData(response.token, response.user);
-      
-      setState({
-        user: response.user,
-        token: response.token,
-        isLoading: false,
-        error: null,
-        isAuthenticated: true,
+      const { data, error } = await supabase.auth.signUp({
+        email: credentials.email,
+        password: credentials.password,
+        options: {
+          data: {
+            firstName: credentials.firstName,
+            lastName: credentials.lastName,
+          },
+        },
       });
       
-      return true;
-    } catch (error) {
-      const apiError = handleAPIError(error);
+      if (error) {
+        throw error;
+      }
+      
+      if (data.user) {
+        // For signup, user might need email confirmation
+        if (data.session) {
+          const user: User = {
+            id: data.user.id,
+            email: data.user.email || '',
+            firstName: credentials.firstName,
+            lastName: credentials.lastName,
+            isEmailVerified: data.user.email_confirmed_at !== null,
+            createdAt: data.user.created_at,
+          };
+          
+          await saveAuthData(data.session.access_token, user);
+          
+          setState({
+            user,
+            token: data.session.access_token,
+            isLoading: false,
+            error: null,
+            isAuthenticated: true,
+          });
+        } else {
+          // Email confirmation required
+          setState(prev => ({ 
+            ...prev, 
+            isLoading: false, 
+            error: 'Please check your email to confirm your account',
+            isAuthenticated: false,
+          }));
+        }
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error: any) {
+      console.error('Signup error:', error);
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
-        error: apiError.message,
+        error: error.message || 'Signup failed',
         isAuthenticated: false,
       }));
       
@@ -190,6 +303,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   // Logout function
   const logout = async () => {
     setState(prev => ({ ...prev, isLoading: true }));
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Logout error:', error);
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     
     await clearAuthData();
     

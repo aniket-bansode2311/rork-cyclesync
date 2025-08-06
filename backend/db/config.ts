@@ -3,15 +3,19 @@ import postgres from 'postgres';
 import * as schema from './schema';
 import * as relations from './relations';
 
-// Database configuration
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/cyclesync';
+// Database configuration - Using Supabase PostgreSQL
+const DATABASE_URL = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL || 'postgresql://localhost:5432/cyclesync';
 
-// Create the connection
+if (!DATABASE_URL) {
+  throw new Error('DATABASE_URL or SUPABASE_DATABASE_URL environment variable is required');
+}
+
+// Create the connection with Supabase-compatible settings
 const queryClient = postgres(DATABASE_URL, {
   max: 20,
   idle_timeout: 20,
   connect_timeout: 10,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: { rejectUnauthorized: false }, // Supabase requires SSL
 });
 
 // Create the database instance

@@ -6,6 +6,8 @@ import { calculateCycleStats, getPredictedOvulationDate, getPredictedFertileWind
 import { useNotifications } from '@/hooks/useNotifications';
 import { secureStorage } from '@/utils/secureStorage';
 import { PrivacySettings } from '@/types/privacy';
+import SupabaseService from '@/lib/supabaseService';
+import { useAuth } from '@/hooks/useAuth';
 
 const PERIODS_STORAGE_KEY = 'periods_data';
 
@@ -54,11 +56,45 @@ export const [PeriodProvider, usePeriods] = createContextHook((): PeriodContextT
     }
   }, [periods]);
 
+  const { user, isAuthenticated } = useAuth();
+
   const loadPeriods = async () => {
     try {
       setIsLoading(true);
       
-      // Try secure storage first if encryption is enabled
+      if (isAuthenticated && user) {
+        // Load from Supabase
+        try {
+          const cycles = await SupabaseService.getUserCycles(user.id);
+          const periodLogs = await SupabaseService.getUserPeriodLogs(user.id);
+          
+          // Convert Supabase data to Period format
+          const supabasePeriods: Period[] = cycles.map(cycle => ({
+            id: cycle.id,
+            startDate: cycle.start_date,
+            endDate: cycle.end_date || undefined,
+            flow: 'medium', // Default flow, can be enhanced
+            symptoms: [],
+            notes: cycle.notes || undefined,
+          }));
+          
+          setPeriods(supabasePeriods);
+          
+          // Sync to local storage for offline access
+          if (useEncryption) {
+            await secureStorage.setSecureData(PERIODS_STORAGE_KEY, supabasePeriods, true);
+          } else {
+            await AsyncStorage.setItem(PERIODS_STORAGE_KEY, JSON.stringify(supabasePeriods));
+          }
+          
+          return;
+        } catch (supabaseError) {
+          console.error('Error loading from Supabase:', supabaseError);
+          // Fall back to local storage
+        }
+      }
+      
+      // Load from local storage (offline or fallback)
       if (useEncryption) {
         const secureData = await secureStorage.getSecureData<Period[]>(PERIODS_STORAGE_KEY, true);
         if (secureData) {
@@ -88,17 +124,52 @@ export const [PeriodProvider, usePeriods] = createContextHook((): PeriodContextT
 
   const savePeriods = async (newPeriods: Period[]) => {
     try {
+      // Save to local storage first
       if (useEncryption) {
         await secureStorage.setSecureData(PERIODS_STORAGE_KEY, newPeriods, true);
       } else {
         await AsyncStorage.setItem(PERIODS_STORAGE_KEY, JSON.stringify(newPeriods));
+      }
+      
+      // Sync to Supabase if authenticated
+      if (isAuthenticated && user) {
+        try {
+          // Note: This is a simplified sync. In a real app, you'd want more sophisticated sync logic
+          // to handle conflicts, deletions, etc.
+          for (const period of newPeriods) {
+            const cycleData = {
+              user_id: user.id,
+              start_date: period.startDate,
+              end_date: period.endDate || null,
+              notes: period.notes || null,
+              is_complete: !!period.endDate,
+            };
+            
+            // Check if cycle exists, update or insert
+            const existingCycles = await SupabaseService.select('cycles', {
+              eq: { column: 'id', value: period.id }
+            });
+            
+            if (existingCycles.length > 0) {
+              await SupabaseService.update('cycles', period.id, cycleData);
+            } else {
+              await SupabaseService.insert('cycles', {
+                id: period.id,
+                ...cycleData
+              });
+            }
+          }
+        } catch (supabaseError) {
+          console.error('Error syncing to Supabase:', supabaseError);
+          // Continue with local storage, sync will be attempted later
+        }
       }
     } catch (error) {
       console.error('Error saving periods:', error);
     }
   };
 
-  const addPeriod = (periodData: Omit<Period, 'id'>) => {
+  const addPeriod = async (periodData: Omit<Period, 'id'>) => {
     const newPeriod: Period = {
       ...periodData,
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -106,21 +177,30 @@ export const [PeriodProvider, usePeriods] = createContextHook((): PeriodContextT
     
     const updatedPeriods = [...periods, newPeriod];
     setPeriods(updatedPeriods);
-    savePeriods(updatedPeriods);
+    await savePeriods(updatedPeriods);
   };
 
-  const updatePeriod = (id: string, updates: Partial<Period>) => {
+  const updatePeriod = async (id: string, updates: Partial<Period>) => {
     const updatedPeriods = periods.map(period =>
       period.id === id ? { ...period, ...updates } : period
     );
     setPeriods(updatedPeriods);
-    savePeriods(updatedPeriods);
+    await savePeriods(updatedPeriods);
   };
 
-  const deletePeriod = (id: string) => {
+  const deletePeriod = async (id: string) => {
     const updatedPeriods = periods.filter(period => period.id !== id);
     setPeriods(updatedPeriods);
-    savePeriods(updatedPeriods);
+    await savePeriods(updatedPeriods);
+    
+    // Delete from Supabase
+    if (isAuthenticated && user) {
+      try {
+        await SupabaseService.delete('cycles', id);
+      } catch (error) {
+        console.error('Error deleting from Supabase:', error);
+      }
+    }
     
     // Cancel notifications for this period
     cancelNotificationsByRelatedId(id);
